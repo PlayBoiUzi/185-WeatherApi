@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft MapTiler Locator automatic</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --sky-top: #5b9bf0;
+        --sky-bottom: #a9d3ff;
+        --gui: #c6c6c6;
+        --gui-light: #ffffff;
+        --gui-dark: #555555;
+        --slot: #8b8b8b;
+        --ink: #3f3f3f;
+        --gold: #ffd84a;
+        --grass: #5fbf3a;
+        --emerald: #4dff88;
+        --redstone: #ff5555;
+        --wood: #9a6b3c;
+        --wood-dark: #5e3d1f;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+        margin: 0;
+        font-family: 'VT323', monospace;
+        color: var(--ink);
+        background: linear-gradient(var(--sky-top), var(--sky-bottom));
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 40px 16px 120px;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    /* Dunia pixel digambar oleh JS di canvas ini */
+    #world {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        image-rendering: pixelated;
+        pointer-events: none;
+    }
+
+    .stage {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        max-width: 620px;
+        margin-top: 2vh;
+    }
+
+    /* Papan nama (sign) */
+    .sign {
+        position: relative;
+        margin: 0 auto -18px;
+        width: 92%;
+        padding: 22px 16px 26px;
+        text-align: center;
+        background:
+            repeating-linear-gradient(90deg, transparent 0 46px, rgba(0,0,0,.09) 46px 48px),
+            repeating-linear-gradient(0deg, transparent 0 14px, rgba(0,0,0,.07) 14px 16px),
+            var(--wood);
+        border: 4px solid #000;
+        box-shadow:
+            inset 4px 4px 0 rgba(255,255,255,.28),
+            inset -4px -4px 0 var(--wood-dark),
+            8px 8px 0 rgba(0,0,0,.35);
+        z-index: 2;
+    }
+    .sign::before, .sign::after {
+        content: "";
+        position: absolute;
+        top: 10px;
+        width: 8px;
+        height: 8px;
+        background: #2b1a0b;
+        box-shadow: 1px 1px 0 rgba(255,255,255,.35);
+    }
+    .sign::before { left: 12px; }
+    .sign::after { right: 12px; }
+
+    .sign h1 {
+        margin: 0;
+        font-family: 'Press Start 2P', monospace;
+        font-weight: 400;
+        font-size: clamp(14px, 3.6vw, 22px);
+        line-height: 1.5;
+        color: #fff;
+        text-shadow: 3px 3px 0 #2b1a0b;
+    }
+    .sign p {
+        margin: 8px 0 0;
+        font-size: clamp(24px, 5vw, 32px);
+        color: var(--gold);
+        text-shadow: 2px 2px 0 #2b1a0b;
+        letter-spacing: 2px;
+    }
+
+    /* Panel inventory */
+    .gui {
+        position: relative;
+        padding: 44px 28px 28px;
+        background: var(--gui);
+        border: 4px solid #000;
+        box-shadow:
+            inset -6px -6px 0 var(--gui-dark),
+            inset 6px 6px 0 var(--gui-light),
+            12px 12px 0 rgba(0,0,0,.4);
+    }
+
+    .label {
+        font-size: 26px;
+        margin: 0 0 6px 2px;
+        color: var(--ink);
+        text-shadow: 1px 1px 0 #fff;
+    }
+
+    .search {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .mc-input {
+        flex: 1;
+        min-width: 0;
+        padding: 12px 14px;
+        font-family: 'VT323', monospace;
+        font-size: 28px;
+        color: #fff;
+        background: #000;
+        border: 4px solid var(--slot);
+        border-color: #373737 #fff #fff #373737;
+        outline: none;
+        caret-color: var(--gold);
+    }
+    .mc-input::placeholder { color: #777; }
+    .mc-input:focus { box-shadow: 0 0 0 3px var(--gold); }
+
+    .mc-button {
+        padding: 0 24px;
+        font-family: 'VT323', monospace;
+        font-size: 28px;
+        color: #fff;
+        text-shadow: 3px 3px 0 #3f3f3f;
+        background: #707070;
+        border: 4px solid #000;
+        box-shadow:
+            inset -4px -4px 0 #4a4a4a,
+            inset 4px 4px 0 #a8a8a8;
+        cursor: pointer;
+    }
+    .mc-button:hover { background: #6d7ae0; box-shadow: inset -4px -4px 0 #4552b8, inset 4px 4px 0 #a3adff; }
+    .mc-button:active { box-shadow: inset 4px 4px 0 #4a4a4a, inset -4px -4px 0 #a8a8a8; padding-top: 4px; }
+    .mc-button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+    .mc-button:disabled { cursor: wait; filter: grayscale(.6); }
+
+    /* Chat box ala Minecraft */
+    .chat {
+        min-height: 46px;
+        margin-bottom: 18px;
+        padding: 8px 12px;
+        font-size: 24px;
+        line-height: 1.2;
+        color: #fff;
+        background: rgba(0,0,0,.72);
+        border: 3px solid #000;
+        text-shadow: 2px 2px 0 #3f3f3f;
+    }
+    .chat .tag { color: #b8b8b8; }
+    .chat.error .msg { color: var(--redstone); }
+    .chat.ok .msg { color: var(--emerald); }
+    .chat.busy .msg { color: var(--gold); animation: blink 1s steps(2, start) infinite; }
+
+    @keyframes blink { 50% { opacity: .35; } }
+
+    /* Slot hasil */
+    .slots {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        background: var(--slot);
+        border: 4px solid;
+        border-color: #373737 #fff #fff #373737;
+    }
+
+    .slot {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 12px 6px 6px;
+        background: #6b6b6b;
+        border: 4px solid;
+        border-color: #373737 #fff #fff #373737;
+    }
+
+    .icon {
+        width: 44px;
+        height: 44px;
+        image-rendering: pixelated;
+        border: 3px solid #000;
+        background-size: 100% 100%;
+    }
+    .icon.i-negara  { background-image: linear-gradient(#5b9bf0 50%, #5fbf3a 50%); }
+    .icon.i-provinsi { background-image: linear-gradient(90deg, #9a6b3c 50%, #7c5840 50%); }
+    .icon.i-kota { background-image: linear-gradient(#ffd84a 50%, #c69a1f 50%); }
+    .icon.i-lon { background-image: linear-gradient(90deg, #ff5555 50%, #b02525 50%); }
+    .icon.i-lat { background-image: linear-gradient(90deg, #4d6bff 50%, #2a3fb0 50%); }
+
+    .slot dt {
+        margin: 0;
+        font-size: 22px;
+        color: #d4d4d4;
+        text-shadow: 2px 2px 0 #333;
+    }
+    .slot dd {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.05;
+        color: var(--emerald);
+        text-shadow: 2px 2px 0 #14522a;
+        overflow-wrap: anywhere;
+    }
+    .slot dd.empty { color: #9a9a9a; text-shadow: 2px 2px 0 #333; }
+
+    .slot.found { animation: pop .35s steps(4); }
+    @keyframes pop { 0% { transform: scale(.94); } 100% { transform: scale(1); } }
+
+    .footer-note {
+        margin: 14px 0 0;
+        text-align: center;
+        font-size: 22px;
+        color: #555;
+        text-shadow: 1px 1px 0 #fff;
+    }
+
+    @media (max-width: 480px) {
+        .gui { padding: 40px 16px 20px; }
+        .search { flex-direction: column; }
+        .mc-button { padding: 8px 0; }
+        .slot { grid-template-columns: 36px 1fr; }
+        .icon { width: 36px; height: 36px; }
+        .slot dd { font-size: 26px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .chat.busy .msg, .slot.found { animation: none; }
+    }
+</style>
+</head>
+<body>
+
+<canvas id="world" aria-hidden="true"></canvas>
+
+<main class="stage">
+    <header class="sign">
+        <h1>M. Dzaky Rafi Al Aziz</h1>
+        <p>NIM : 20240140185</p>
+    </header>
+
+    <section class="gui">
+        <label class="label" for="inputKota">Lokasi yang dicari</label>
+        <div class="search">
+            <input type="text" id="inputKota" class="mc-input" placeholder="Contoh: Yogyakarta" autocomplete="off">
+            <button class="mc-button" id="btnCari" type="button">CARI</button>
+        </div>
+
+        <div id="chat" class="chat" role="status" aria-live="polite">
+            <span class="tag">&lt;Server&gt;</span> <span class="msg">Ketik nama lokasi, lalu tekan CARI.</span>
+        </div>
+
+        <dl class="slots">
+            <div class="slot"><span class="icon i-negara"></span><div><dt>Negara</dt><dd id="negara" class="empty">-</dd></div></div>
+            <div class="slot"><span class="icon i-provinsi"></span><div><dt>Provinsi</dt><dd id="provinsi" class="empty">-</dd></div></div>
+            <div class="slot"><span class="icon i-kota"></span><div><dt>Kecamatan/Kota</dt><dd id="kecamatan" class="empty">-</dd></div></div>
+            <div class="slot"><span class="icon i-lon"></span><div><dt>Longitude</dt><dd id="lon" class="empty">-</dd></div></div>
+            <div class="slot"><span class="icon i-lat"></span><div><dt>Latitude</dt><dd id="lat" class="empty">-</dd></div></div>
+        </dl>
+
+        <p class="footer-note">Peta dunia nyata, gaya blok.</p>
+    </section>
+</main>
+
+<script>
+    /* ---------- Dunia pixel (background canvas) ---------- */
+    (function drawWorld() {
+        const canvas = document.getElementById("world");
+        const ctx = canvas.getContext("2d");
+        const PX = 8; // ukuran satu "blok" dalam piksel layar
+
+        // Random dengan seed supaya dunia sama saat di-resize
+        function rng(seed) {
+            return function () {
+                seed = (seed * 1664525 + 1013904223) % 4294967296;
+                return seed / 4294967296;
+            };
+        }
+
+        function shade(hex, amt) {
+            const n = parseInt(hex.slice(1), 16);
+            const c = v => Math.max(0, Math.min(255, v + amt));
+            return "rgb(" + c(n >> 16) + "," + c((n >> 8) & 255) + "," + c(n & 255) + ")";
+        }
+
+        function render() {
+            const W = Math.ceil(window.innerWidth / PX);
+            const H = Math.ceil(window.innerHeight / PX);
+            canvas.width = W;
+            canvas.height = H;
+            const rand = rng(20240140185 % 4294967296);
+
+            // Langit
+            const sky = ctx.createLinearGradient(0, 0, 0, H);
+            sky.addColorStop(0, "#5b9bf0");
+            sky.addColorStop(1, "#a9d3ff");
+            ctx.fillStyle = sky;
+            ctx.fillRect(0, 0, W, H);
+
+            // Matahari kotak
+            ctx.fillStyle = "#fff6b0";
+            ctx.fillRect(W - 14, 4, 6, 6);
+            ctx.fillStyle = "#ffe25a";
+            ctx.fillRect(W - 13, 5, 4, 4);
+
+            // Awan
+            ctx.fillStyle = "rgba(255,255,255,.9)";
+            for (let i = 0; i < Math.max(3, W / 18); i++) {
+                const cx = Math.floor(rand() * W);
+                const cy = 3 + Math.floor(rand() * (H * 0.3));
+                const len = 6 + Math.floor(rand() * 8);
+                ctx.fillRect(cx, cy, len, 2);
+                ctx.fillRect(cx + 2, cy - 1, len - 4, 1);
+            }
+
+            // Tinggi tanah (random walk) di sepertiga bawah
+            const base = Math.floor(H * 0.8);
+            let h = base;
+            const heights = [];
+            for (let x = 0; x < W; x++) {
+                const r = rand();
+                if (r < 0.15 && h > base - 3) h--;
+                else if (r > 0.85 && h < base + 2) h++;
+                heights.push(h);
+            }
+
+            const grassCols = ["#5fbf3a", "#4fa82e", "#6ed045"];
+            const dirtCols = ["#8a5e3b", "#7c5840", "#946a44", "#6a4b35"];
+            const stoneCols = ["#8b8b8b", "#7a7a7a", "#9a9a9a", "#6e6e6e"];
+            const ores = ["#2b2b2b", "#d8af93", "#e0c341", "#4dd6d0"];
+
+            for (let x = 0; x < W; x++) {
+                const top = heights[x];
+                for (let y = top; y < H; y++) {
+                    const d = y - top;
+                    let col;
+                    if (d === 0) col = grassCols[Math.floor(rand() * grassCols.length)];
+                    else if (d < 4) col = dirtCols[Math.floor(rand() * dirtCols.length)];
+                    else {
+                        col = stoneCols[Math.floor(rand() * stoneCols.length)];
+                        if (rand() < 0.03) col = ores[Math.floor(rand() * ores.length)];
+                    }
+                    ctx.fillStyle = col;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+                // Bayangan bawah rumput
+                if (top + 1 < H) {
+                    ctx.fillStyle = "rgba(60,120,40,.55)";
+                    ctx.fillRect(x, top + 1, 1, 1);
+                }
+            }
+
+            // Beberapa pohon pixel
+            for (let x = 6; x < W - 6; x += 22 + Math.floor(rand() * 16)) {
+                const top = heights[x];
+                const trunk = 4 + Math.floor(rand() * 2);
+                ctx.fillStyle = "#6b4a2b";
+                ctx.fillRect(x, top - trunk, 1, trunk);
+                ctx.fillStyle = "#2f8f2f";
+                ctx.fillRect(x - 2, top - trunk - 2, 5, 3);
+                ctx.fillRect(x - 1, top - trunk - 3, 3, 1);
+                ctx.fillStyle = "#3aa83a";
+                ctx.fillRect(x - 2, top - trunk - 2, 5, 1);
+            }
+        }
+
+        render();
+        let t;
+        window.addEventListener("resize", function () {
+            clearTimeout(t);
+            t = setTimeout(render, 150);
+        });
+    })();
+
+    /* ---------- Logika pencarian ---------- */
+    const chat = document.getElementById("chat");
+    const btn = document.getElementById("btnCari");
+    const input = document.getElementById("inputKota");
+    const fields = ["negara", "provinsi", "kecamatan", "lon", "lat"];
+
+    function say(type, text) {
+        chat.className = "chat " + type;
+        chat.innerHTML = '<span class="tag">&lt;Server&gt;</span> <span class="msg"></span>';
+        chat.querySelector(".msg").textContent = text;
+    }
+
+    function setField(id, value) {
+        const el = document.getElementById(id);
+        const empty = value === undefined || value === null || value === "";
+        el.textContent = empty ? "-" : value;
+        el.classList.toggle("empty", empty);
+        const slot = el.closest(".slot");
+        slot.classList.remove("found");
+        if (!empty) { void slot.offsetWidth; slot.classList.add("found"); }
+    }
+
+    function resetFields() { fields.forEach(function (id) { setField(id, ""); }); }
+
+    function cariLokasi() {
+        const kota = input.value.trim();
+
+        if (!kota) {
+            say("error", "Masukkan nama lokasi terlebih dahulu!");
+            input.focus();
+            return;
+        }
+
+        btn.disabled = true;
+        say("busy", "Mencari koordinat...");
+
+        fetch("/api/lokasi?kota=" + encodeURIComponent(kota))
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.message) {
+                    resetFields();
+                    say("error", data.message);
+                    return;
+                }
+                setField("negara", data.negara);
+                setField("provinsi", data.provinsi);
+                setField("kecamatan", data.kecamatan);
+                setField("lon", data.longitude);
+                setField("lat", data.latitude);
+                say("ok", "Lokasi ditemukan: " + kota);
+            })
+            .catch(function (error) {
+                console.error("Error:", error);
+                say("error", "Koneksi gagal, cek terminal Node.js!");
+            })
+            .finally(function () { btn.disabled = false; });
+    }
+
+    btn.addEventListener("click", cariLokasi);
+    input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") cariLokasi();
+    });
+</script>
+</body>
+</html>
